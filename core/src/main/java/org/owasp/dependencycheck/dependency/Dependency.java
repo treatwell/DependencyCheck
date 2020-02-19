@@ -33,11 +33,14 @@ import java.io.Serializable;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.owasp.dependencycheck.analyzer.exception.UnexpectedAnalysisException;
 import org.owasp.dependencycheck.dependency.naming.CpeIdentifier;
@@ -75,6 +78,15 @@ public class Dependency extends EvidenceCollection implements Serializable {
      * The SHA256 hashing function.
      */
     private static final HashingFunction SHA256_HASHING_FUNCTION = (File file) -> Checksum.getSHA256Checksum(file);
+
+	private static final Map<HashingFunction, Map<File, String>> hashes = new HashMap<>(3);
+
+	static {
+		hashes.put(MD5_HASHING_FUNCTION, new ConcurrentHashMap<>());
+		hashes.put(SHA256_HASHING_FUNCTION, new ConcurrentHashMap<>());
+		hashes.put(SHA1_HASHING_FUNCTION, new ConcurrentHashMap<>());
+	}
+
     /**
      * A list of Identifiers.
      */
@@ -209,13 +221,9 @@ public class Dependency extends EvidenceCollection implements Serializable {
      * @param file the file used to calculate the checksums
      */
     private void calculateChecksums(File file) {
-        try {
-            this.md5sum = Checksum.getMD5Checksum(file);
-            this.sha1sum = Checksum.getSHA1Checksum(file);
-            this.sha256sum = Checksum.getSHA256Checksum(file);
-        } catch (NoSuchAlgorithmException | IOException ex) {
-            LOGGER.debug(String.format("Unable to calculate checksums on %s", file), ex);
-        }
+        getMd5sum();
+        getSha1sum();
+        getSha256sum();
     }
 
     /**
@@ -691,9 +699,16 @@ public class Dependency extends EvidenceCollection implements Serializable {
         if (isVirtual) {
             return null;
         }
+
         try {
             final File file = getActualFile();
-            return hashFunction.hash(file);
+            Map<File, String> hashesForHashFunction = hashes.get(hashFunction);
+            String hash = hashesForHashFunction.get(file);
+            if (hash == null) {
+                hash = hashFunction.hash(file);
+                hashesForHashFunction.put(file, hash);
+            }
+            return hash;
         } catch (IOException | RuntimeException ex) {
             LOGGER.warn("Unable to read '{}' to determine hashes.", actualFilePath);
             LOGGER.debug("", ex);
