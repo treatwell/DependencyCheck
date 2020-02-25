@@ -83,7 +83,7 @@ public final class Checksum {
     public static byte[] getChecksum(String algorithm, File file) throws NoSuchAlgorithmException, IOException {
         HashFunction hashFunction = null;
 
-        switch (algorithm) {
+        switch (algorithm.toUpperCase()) {
             case MD5:
                 hashFunction = Hashing.md5();
                 break;
